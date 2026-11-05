@@ -1,0 +1,5 @@
+id,name,arrival,burst,priority,period,deadline
+1,SensorRead,0,1,1,4,4
+2,MotorControl,0,2,2,6,6
+3,Telemetry,0,2,3,12,12
+4,Logger,3,3,4,0,20
