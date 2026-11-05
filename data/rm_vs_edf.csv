@@ -1,0 +1,5 @@
+# U = 2/5 + 4/7 = 0.971: above the RM bound (0.828), below 1.
+# RM misses a deadline at t=7, EDF meets every deadline.
+id,name,arrival,burst,priority,period,deadline
+1,FastLoop,0,2,1,5,0
+2,SlowLoop,0,4,2,7,0

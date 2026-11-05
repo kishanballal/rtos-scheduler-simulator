@@ -1,0 +1,6 @@
+# Classic CPU-scheduling textbook set: good for FCFS vs RR vs Priority.
+id,name,arrival,burst,priority,period,deadline
+1,Compile,0,6,3,0,0
+2,Keyboard,1,2,1,0,0
+3,Network,2,4,2,0,0
+4,Backup,4,3,4,0,0
