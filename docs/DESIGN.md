@@ -69,8 +69,8 @@ classDiagram
         +name() string*
         +onJobArrival(Job*)*
         +pickNext(Job* running, Tick now) Job**
-        +onJobComplete(Job*)*
-        +isPreemptive() bool*
+        +onJobComplete(Job*)
+        +hasReadyJobs() bool*
     }
     class FcfsScheduler
     class RoundRobinScheduler { -CircularQueue~Job*~ queue_ -Tick quantum_ }
@@ -129,10 +129,14 @@ public:
     virtual std::string name() const = 0;
     virtual void onJobArrival(Job* job) = 0;              // job enters ready queue
     virtual Job* pickNext(Job* running, Tick now) = 0;     // who runs this tick?
-    virtual void onJobComplete(Job* job) = 0;             // cleanup
-    virtual bool isPreemptive() const = 0;
+    virtual void onJobComplete(Job* job) {}               // optional cleanup
+    virtual bool hasReadyJobs() const = 0;                // lets the engine stop early
 };
 ```
+
+Preemption is not a flag: a non-preemptive scheduler (FCFS) simply returns
+`running` whenever it is non-null. When a scheduler returns a different job,
+it is responsible for putting `running` back into its own ready queue.
 
 The simulator loop, per tick, is always:
 
