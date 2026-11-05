@@ -29,6 +29,10 @@ public:
     /// The job returned by the last pickNext() has finished its work.
     virtual void onJobComplete(Job* /*job*/) {}
 
+    /// A job's effectivePriority changed (Priority Inheritance). Schedulers
+    /// whose order depends on it must re-sort their ready queue.
+    virtual void onPriorityChanged(Job* /*job*/) {}
+
     /// True if any job is waiting in the ready queue.
     virtual bool hasReadyJobs() const = 0;
 };

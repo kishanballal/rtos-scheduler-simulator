@@ -79,6 +79,45 @@ Priority  3.75    7.50    2.25    0       4         100.00  4
 Round Robin has the best response time but the most context switches; that is
 the classic trade-off.
 
+## Stretch features
+
+### Priority inversion and Priority Inheritance
+
+An optional 8th CSV column gives a task a critical section on a shared mutex:
+`R1:1:3` means "lock R1 after 1 tick of work, hold it for 3 ticks".
+`data/priority_inversion.csv` reproduces the Mars Pathfinder bug:
+
+```
+rtos_sim data/priority_inversion.csv --algo priority        # High finishes at t=10, misses deadline 8
+rtos_sim data/priority_inversion.csv --algo priority --pi   # High finishes at t=6
+```
+
+Without inheritance, Medium preempts Low while Low holds the mutex High needs,
+so High effectively waits for a lower-priority task. With `--pi`, Low inherits
+High's priority until it unlocks. That needs the ready queue re-sorted in
+place, which is why `MinHeap` has an O(n) `rebuild()` (`std::priority_queue`
+can't do that). In `--algo all` mode the Priority+PI run is added automatically.
+
+![Priority inversion vs inheritance](docs/priority_inversion.png)
+
+### Sporadic tasks
+
+`--jitter N` turns `period` into a *minimum* inter-arrival time: each release
+comes `period + random(0..N)` ticks after the last one (seeded with `--seed`,
+so runs are reproducible). RM and EDF schedulability tests still hold, because
+they only need the minimum separation.
+
+### Timeline export and plotting
+
+```
+rtos_sim data/rm_vs_edf.csv --export timeline.csv
+pip install matplotlib
+python scripts/plot_timeline.py timeline.csv timeline.png
+```
+
+The CSV has `scheduler,tick,task_id,task_name` rows; the script draws one
+Gantt subplot per scheduler.
+
 ## Class diagram
 
 ```mermaid
@@ -137,9 +176,10 @@ Whole run: O(H log n + J log T) time, O(H + J) space for the timeline and jobs.
 ```
 include/rtos/   public headers (Task, Job, MinHeap, CircularQueue, Scheduler, ...)
 src/            implementations + main.cpp (thin CLI)
-tests/          GoogleTest suites (32 tests)
+tests/          GoogleTest suites (39 tests)
 data/           sample task sets
-docs/           design notes
+docs/           design notes, interview prep
+scripts/        Python plotting script
 ```
 
 ## Real RTOS connections

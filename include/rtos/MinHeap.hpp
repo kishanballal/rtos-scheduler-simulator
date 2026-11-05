@@ -52,6 +52,14 @@ public:
     bool empty() const noexcept { return data_.empty(); }
     std::size_t size() const noexcept { return data_.size(); }
 
+    /// Restore the heap property after element keys changed in place (e.g. a
+    /// job's priority was raised by Priority Inheritance). Bottom-up heapify:
+    /// O(n), cheaper than n pushes at O(n log n). std::priority_queue cannot
+    /// do this, which is one reason this heap is hand-written.
+    void rebuild() {
+        for (std::size_t i = data_.size() / 2; i-- > 0;) siftDown(i);
+    }
+
 private:
     void siftUp(std::size_t i) {
         while (i > 0) {

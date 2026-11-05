@@ -23,6 +23,7 @@ struct SimulationResult {
     std::vector<int> timeline;       // task id that ran in each tick, or kIdle
     std::vector<Job> jobs;           // final state of every released job
     int contextSwitches = 0;         // CPU handed from one job to a different one
+    int blockings = 0;               // times a job blocked on a held mutex
 };
 
 class Simulator {
@@ -32,6 +33,18 @@ public:
 
     /// Swap the algorithm at runtime (Strategy pattern). Takes ownership.
     void setScheduler(std::unique_ptr<Scheduler> scheduler);
+
+    /// When a job blocks on a mutex, the owner inherits the blocked job's
+    /// priority until it unlocks (FreeRTOS mutexes do this automatically).
+    void setPriorityInheritance(bool enabled) noexcept { priorityInheritance_ = enabled; }
+
+    /// Sporadic mode: each periodic release comes `period + U[0, maxJitter]`
+    /// after the previous one, so `period` becomes a MINIMUM inter-arrival
+    /// time. Seeded, so runs are reproducible. 0 = strictly periodic.
+    void setReleaseJitter(Tick maxJitter, unsigned seed = 1) noexcept {
+        maxJitter_ = maxJitter;
+        seed_ = seed;
+    }
 
     /// Runs ticks [0, horizon). Stops early if nothing is left to do.
     SimulationResult run(Tick horizon);
@@ -50,6 +63,9 @@ private:
     std::unordered_map<int, std::size_t> byId_;  // so pointers into it stay valid
     std::unique_ptr<Scheduler> scheduler_;
     Clock clock_;
+    bool priorityInheritance_ = false;
+    Tick maxJitter_ = 0;
+    unsigned seed_ = 1;
 };
 
 } // namespace rtos

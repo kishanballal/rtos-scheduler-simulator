@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <random>
 #include <stdexcept>
 #include <utility>
 
@@ -22,6 +23,65 @@ struct EarlierRelease {
         if (a.time != b.time) return a.time < b.time;
         return a.task->id() < b.task->id();
     }
+};
+
+/// A binary mutex: one owner, plus the jobs blocked waiting for it.
+struct Mutex {
+    Job* owner = nullptr;
+    std::vector<Job*> waiters;
+};
+
+/// All shared resources, looked up by name in O(1).
+class MutexTable {
+public:
+    MutexTable(Scheduler& scheduler, bool inheritance, int& blockings)
+        : scheduler_(scheduler), inheritance_(inheritance), blockings_(blockings) {}
+
+    /// Called before `job` runs a tick. Returns false if it must block.
+    bool acquireOrBlock(Job* job) {
+        const auto& cs = job->task->criticalSection();
+        if (!cs || job->progress() != cs->start) return true;   // not at its lock point
+        Mutex& m = mutexes_[cs->resource];
+        if (m.owner == nullptr || m.owner == job) {
+            m.owner = job;
+            return true;
+        }
+        m.waiters.push_back(job);   // parked here, invisible to the scheduler
+        ++blockings_;
+        if (inheritance_ && job->effectivePriority < m.owner->effectivePriority) {
+            m.owner->effectivePriority = job->effectivePriority;   // inherit
+            scheduler_.onPriorityChanged(m.owner);
+        }
+        return false;
+    }
+
+    /// Called after `job` ran a tick. Unlocks if its critical section ended.
+    void releaseIfDone(Job* job) {
+        const auto& cs = job->task->criticalSection();
+        if (!cs) return;
+        Mutex& m = mutexes_[cs->resource];
+        if (m.owner != job) return;
+        if (job->progress() < cs->start + cs->length && job->remaining > 0) return;
+
+        m.owner = nullptr;
+        if (job->effectivePriority != job->task->priority()) {
+            job->effectivePriority = job->task->priority();          // drop back to base
+            scheduler_.onPriorityChanged(job);
+        }
+        if (m.waiters.empty()) return;
+        // Wake the most urgent waiter; it retries the lock when next picked.
+        const auto best = std::min_element(m.waiters.begin(), m.waiters.end(),
+            [](const Job* a, const Job* b) { return a->effectivePriority < b->effectivePriority; });
+        Job* woken = *best;
+        m.waiters.erase(best);
+        scheduler_.onJobArrival(woken);
+    }
+
+private:
+    Scheduler& scheduler_;
+    bool inheritance_;
+    int& blockings_;
+    std::unordered_map<std::string, Mutex> mutexes_;
 };
 
 } // namespace
@@ -64,10 +124,14 @@ SimulationResult Simulator::run(Tick horizon) {
     MinHeap<Release, EarlierRelease> events;
     for (const Task& t : tasks_) events.push({t.arrival(), &t});
 
+    std::mt19937 rng(seed_);   // re-seeded every run: same input, same timeline
+    std::uniform_int_distribution<Tick> jitter(0, std::max<Tick>(maxJitter_, 0));
+
     std::vector<std::unique_ptr<Job>> jobs;   // owns every job; schedulers hold Job*
     SimulationResult result;
-    result.schedulerName = scheduler_->name();
+    result.schedulerName = scheduler_->name() + (priorityInheritance_ ? "+PI" : "");
     result.timeline.reserve(static_cast<std::size_t>(horizon));
+    MutexTable mutexes(*scheduler_, priorityInheritance_, result.blockings);
 
     Job* running = nullptr;       // ran last tick and still has work
     const Job* lastRun = nullptr; // last job that used the CPU (for context switches)
@@ -81,17 +145,26 @@ SimulationResult Simulator::run(Tick horizon) {
             jobs.push_back(std::make_unique<Job>(
                 Job::make(static_cast<int>(jobs.size()), *ev.task, ev.time)));
             scheduler_->onJobArrival(jobs.back().get());
-            if (ev.task->isPeriodic()) events.push({ev.time + ev.task->period(), ev.task});
+            if (ev.task->isPeriodic()) {
+                const Tick extra = maxJitter_ > 0 ? jitter(rng) : 0;
+                events.push({ev.time + ev.task->period() + extra, ev.task});
+            }
         }
 
         // 2. Nothing running, nothing ready, nothing coming: we are done.
         if (running == nullptr && !scheduler_->hasReadyJobs() && events.empty()) break;
 
-        // 3. Ask the strategy who runs.
+        // 3. Ask the strategy who runs. If that job blocks on a mutex it is
+        //    parked on the mutex, and we ask again.
         Job* next = scheduler_->pickNext(running, now);
+        for (;;) {
+            if (next != running) running = nullptr;   // scheduler re-queued it
+            if (next == nullptr || mutexes.acquireOrBlock(next)) break;
+            running = nullptr;
+            next = scheduler_->pickNext(nullptr, now);
+        }
         if (next == nullptr) {
             result.timeline.push_back(kIdle);
-            running = nullptr;
             continue;
         }
         if (lastRun != nullptr && next != lastRun) ++result.contextSwitches;
@@ -101,6 +174,7 @@ SimulationResult Simulator::run(Tick horizon) {
         --next->remaining;
         result.timeline.push_back(next->task->id());
         lastRun = next;
+        mutexes.releaseIfDone(next);
 
         // 5. Completion.
         if (next->remaining == 0) {

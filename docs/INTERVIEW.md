@@ -64,6 +64,26 @@ Phase 1 questions are at the end of [DESIGN.md](DESIGN.md).
    to a different job. Idle gaps are not counted. Real switches cost time
    (saving and restoring registers), which we model as zero.
 
+## Phase 7: stretch goals
+
+1. **What is priority inversion?** A high-priority task waits on a mutex held
+   by a low-priority task, and a medium-priority task preempts the low one, so
+   the high task is delayed by a task it doesn't depend on. It reset the Mars
+   Pathfinder lander in 1997, and turning on priority inheritance fixed it.
+2. **How does Priority Inheritance fix it?** While a job holds a mutex that a
+   more urgent job is blocked on, the holder runs at the blocked job's
+   priority. It drops back to its base priority when it unlocks. FreeRTOS
+   mutexes (`xSemaphoreCreateMutex`) do this; binary semaphores don't.
+3. **What does inheritance not solve?** Deadlock, and chained blocking (a job
+   can be blocked once per mutex). The Priority Ceiling Protocol solves both by
+   raising a holder to the resource's ceiling as soon as it locks.
+4. **Why did you need `rebuild()` on your heap?** Inheritance changes the key
+   of a job that may already be in the heap. Bottom-up heapify restores order
+   in O(n). `std::priority_queue` has no way to update a key.
+5. **Periodic vs sporadic vs aperiodic?** Periodic: released exactly every T.
+   Sporadic: at least T apart (still analysable with the same tests).
+   Aperiodic: no minimum gap, so no hard guarantee is possible.
+
 ## Phase 6: testing
 
 1. **How did you get the expected values in your scheduler tests?** I worked

@@ -3,7 +3,7 @@
 // adding JSON later touches only this class (single responsibility).
 //
 // Format (header line optional, '#' starts a comment line):
-//   id,name,arrival,burst,priority,period,deadline
+//   id,name,arrival,burst,priority,period,deadline[,resource:start:length]
 
 #include <istream>
 #include <string>

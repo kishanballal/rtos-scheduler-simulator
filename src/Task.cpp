@@ -7,9 +7,14 @@
 namespace rtos {
 
 Task::Task(int id, std::string name, Tick arrival, Tick burst, int priority,
-           Tick period, Tick deadline)
+           Tick period, Tick deadline, std::optional<CriticalSection> cs)
     : id_(id), name_(std::move(name)), arrival_(arrival), burst_(burst),
-      priority_(priority), period_(period), deadline_(deadline) {
+      priority_(priority), period_(period), deadline_(deadline), cs_(std::move(cs)) {
+    if (cs_) {
+        if (cs_->resource.empty()) throw std::invalid_argument("resource name must not be empty");
+        if (cs_->start < 0 || cs_->length <= 0 || cs_->start + cs_->length > burst_)
+            throw std::invalid_argument("critical section must lie inside the burst");
+    }
     if (id_ < 0)        throw std::invalid_argument("task id must be >= 0");
     if (name_.empty())  throw std::invalid_argument("task name must not be empty");
     if (arrival_ < 0)   throw std::invalid_argument("arrival must be >= 0");
@@ -33,6 +38,8 @@ std::ostream& operator<<(std::ostream& os, const Task& t) {
        << ", prio=" << t.priority();
     if (t.isPeriodic()) os << ", T=" << t.period();
     if (t.relativeDeadline() != kNoDeadline) os << ", D=" << t.relativeDeadline();
+    if (const auto& cs = t.criticalSection())
+        os << ", locks " << cs->resource << " @" << cs->start << " for " << cs->length;
     return os << ")";
 }
 

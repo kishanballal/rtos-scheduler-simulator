@@ -1,4 +1,4 @@
-#include "rtos/Report.hpp"
+﻿#include "rtos/Report.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -57,12 +57,12 @@ std::string formatStats(const StatsReport& r) {
 std::string formatComparison(const std::vector<StatsReport>& reports) {
     std::ostringstream os;
     os << "Comparison\n" << std::fixed << std::setprecision(2) << std::left
-       << std::setw(10) << "algo" << std::setw(8) << "wait" << std::setw(8) << "tat"
+       << std::setw(13) << "algo" << std::setw(8) << "wait" << std::setw(8) << "tat"
        << std::setw(8) << "resp" << std::setw(8) << "misses" << std::setw(10) << "switches"
        << std::setw(8) << "util%" << "done\n";
     for (const StatsReport& r : reports) {
         const OverallStats& o = r.overall;
-        os << std::setw(10) << r.schedulerName << std::setw(8) << o.avgWaiting
+        os << std::setw(13) << r.schedulerName << std::setw(8) << o.avgWaiting
            << std::setw(8) << o.avgTurnaround << std::setw(8) << o.avgResponse
            << std::setw(8) << o.deadlineMisses << std::setw(10) << o.contextSwitches
            << std::setw(8) << o.cpuUtilization * 100 << o.completed << '\n';

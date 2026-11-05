@@ -74,14 +74,16 @@ public:
 
     bool hasReadyJobs() const override { return !ready_.empty(); }
 
+    void onPriorityChanged(Job* /*job*/) override { ready_.rebuild(); }
+
 private:
     MinHeap<Job*, Compare> ready_;
 };
 
-struct ByPriority {
+struct ByPriority {   // uses the EFFECTIVE priority so Priority Inheritance works
     bool operator()(const Job* a, const Job* b) const {
-        return std::make_tuple(a->task->priority(), a->release, a->task->id()) <
-               std::make_tuple(b->task->priority(), b->release, b->task->id());
+        return std::make_tuple(a->effectivePriority, a->release, a->task->id()) <
+               std::make_tuple(b->effectivePriority, b->release, b->task->id());
     }
 };
 

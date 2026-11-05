@@ -18,12 +18,17 @@ struct Job {
     Tick absDeadline = kNoDeadline;
     std::optional<Tick> start;     // first tick it ran (for response time)
     std::optional<Tick> finish;    // tick after its last unit of work
+    int effectivePriority = 0;     // base priority, raised by Priority Inheritance
+
+    /// Ticks of work already done.
+    Tick progress() const noexcept { return task->burst() - remaining; }
 
     /// Builds a fresh job for `task` released at `release`.
     static Job make(int jobId, const Task& task, Tick release) {
         const Tick rel = task.relativeDeadline();
         return Job{jobId, &task, release, task.burst(),
-                   rel == kNoDeadline ? kNoDeadline : release + rel, std::nullopt, std::nullopt};
+                   rel == kNoDeadline ? kNoDeadline : release + rel,
+                   std::nullopt, std::nullopt, task.priority()};
     }
 };
 

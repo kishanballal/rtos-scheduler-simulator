@@ -40,6 +40,15 @@ int toInt(const std::string& s) {
     return static_cast<int>(v);
 }
 
+/// Optional 8th column: "RESOURCE:START:LENGTH", e.g. "R1:1:3". Empty = none.
+std::optional<CriticalSection> parseCriticalSection(const std::string& s) {
+    if (s.empty()) return std::nullopt;
+    const auto parts = split(s, ':');
+    if (parts.size() != 3)
+        throw std::invalid_argument("critical section must be RESOURCE:START:LENGTH, got '" + s + "'");
+    return CriticalSection{parts[0], toTick(parts[1]), toTick(parts[2])};
+}
+
 } // namespace
 
 std::vector<Task> TaskLoader::fromStream(std::istream& in) {
@@ -61,11 +70,12 @@ std::vector<Task> TaskLoader::fromStream(std::istream& in) {
 
         const auto f = split(line, ',');
         const std::string where = "line " + std::to_string(lineNo) + ": ";
-        if (f.size() != 7)
-            throw std::runtime_error(where + "expected 7 fields, got " + std::to_string(f.size()));
+        if (f.size() != 7 && f.size() != 8)
+            throw std::runtime_error(where + "expected 7 or 8 fields, got " + std::to_string(f.size()));
         try {
             tasks.emplace_back(toInt(f[0]), f[1], toTick(f[2]), toTick(f[3]), toInt(f[4]),
-                               toTick(f[5]), toTick(f[6]));
+                               toTick(f[5]), toTick(f[6]),
+                               f.size() == 8 ? parseCriticalSection(f[7]) : std::nullopt);
         } catch (const std::exception& e) {
             throw std::runtime_error(where + e.what());
         }

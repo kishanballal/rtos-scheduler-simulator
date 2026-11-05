@@ -35,6 +35,7 @@ add_library(rtos_core STATIC
     src/Schedulability.cpp
     src/GanttRenderer.cpp
     src/Report.cpp
+    src/TimelineExporter.cpp
 )
 target_include_directories(rtos_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 rtos_set_warnings(rtos_core)
@@ -62,6 +63,7 @@ if(RTOS_BUILD_TESTS)
         tests/test_task_loader.cpp
         tests/test_schedulers.cpp
         tests/test_analysis.cpp
+        tests/test_stretch.cpp
     )
     target_compile_definitions(rtos_tests PRIVATE RTOS_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
     target_link_libraries(rtos_tests PRIVATE rtos_core GTest::gtest_main)
