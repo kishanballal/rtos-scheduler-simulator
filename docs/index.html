@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RTOS Scheduler Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a bench instrument. Inputs on the left rail, traces and readouts on the right, stacking on phones. */
+:root {
+  --bg: #f4f6f8; --panel: #ffffff; --ink: #18212b; --muted: #5b6876; --line: #d8dee5;
+  --accent: #0b6e8a; --accent-ink: #ffffff; --good: #1f7a45; --bad: #c0352b; --warn: #a86400;
+  --idle: #e6eaee; --grid: #eef1f4;
+  --t1: #2f6fde; --t2: #d9822b; --t3: #2e9e6a; --t4: #9b4fd1; --t5: #d14f7c; --t6: #3aa6b9; --t7: #8a7a2b; --t8: #5a6b7d;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f151b; --panel: #161e26; --ink: #e3e9ef; --muted: #93a1af; --line: #2a3541;
+  --accent: #46b4d3; --accent-ink: #06222b; --good: #4cc27f; --bad: #ff6b5e; --warn: #f0a63a;
+  --idle: #222c36; --grid: #1c252e;
+  --t1: #6b9cff; --t2: #f0a45a; --t3: #52c48f; --t4: #bf86f0; --t5: #f07fa6; --t6: #5fcadb; --t7: #cdb95a; --t8: #91a3b5;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f151b; --panel: #161e26; --ink: #e3e9ef; --muted: #93a1af; --line: #2a3541;
+  --accent: #46b4d3; --accent-ink: #06222b; --good: #4cc27f; --bad: #ff6b5e; --warn: #f0a63a;
+  --idle: #222c36; --grid: #1c252e;
+  --t1: #6b9cff; --t2: #f0a45a; --t3: #52c48f; --t4: #bf86f0; --t5: #f07fa6; --t6: #5fcadb; --t7: #cdb95a; --t8: #91a3b5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; font-weight: 600; }
+.wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+header a { color: var(--accent); }
+.label { font: 600 0.72rem/1 var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.layout { display: grid; grid-template-columns: minmax(0, 430px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.rail { position: sticky; top: 12px; }
+@media (max-width: 960px) { .rail { position: static; } }
+.out { display: grid; gap: 20px; min-width: 0; }
+
+/* presets */
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 5px 11px; font: 500 0.82rem var(--sans); cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.lesson { margin: 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--grid); border-radius: 0 6px 6px 0; font-size: 0.9rem; }
+
+/* task table */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { text-align: left; font: 600 0.7rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 4px 4px; white-space: nowrap; }
+td { padding: 2px 1px; border-top: 1px solid var(--line); }
+.tasks input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.tasks input::-webkit-inner-spin-button, .tasks input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.tasks input { width: 3em; min-width: 0; border: 1px solid transparent; background: transparent; color: var(--ink); font: 0.85rem var(--mono); padding: 4px 3px; border-radius: 4px; }
+.tasks input:hover { border-color: var(--line); }
+.tasks input:focus { outline: none; border-color: var(--accent); background: var(--bg); }
+.tasks td.name input { width: 7.5em; }
+.tasks td.cs input { width: 5.6em; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 2px 6px; border-radius: 4px; }
+.x:hover { color: var(--bad); }
+.hint { color: var(--muted); font-size: 0.8rem; margin: 0; }
+.hint code { font-family: var(--mono); font-size: 0.78rem; }
+
+/* controls */
+.controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.field { display: grid; gap: 5px; }
+.controls select, .controls input[type="number"] { font: 0.88rem var(--mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 7px 12px; font: 500 0.85rem var(--sans); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+textarea { width: 100%; min-height: 130px; font: 0.8rem/1.45 var(--mono); padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); resize: vertical; }
+.err { color: var(--bad); font-size: 0.88rem; margin: 0; }
+
+/* readouts */
+.sched { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.gauge { display: grid; gap: 6px; }
+.gauge .big { font: 600 1.5rem var(--mono); }
+.bar { position: relative; height: 8px; background: var(--idle); border-radius: 4px; overflow: visible; }
+.bar > i { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+.bar > b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.pill { display: inline-block; font: 600 0.72rem var(--mono); padding: 2px 8px; border-radius: 999px; letter-spacing: 0.03em; }
+.pill.ok { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.pill.no { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.pill.maybe { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.verdict { font-size: 1rem; margin: 0; }
+.verdict strong { color: var(--accent); }
+.cmp td, .cmp th { padding: 7px 8px; white-space: nowrap; }
+.cmp td { font: 0.86rem var(--mono); }
+.cmp tbody tr { cursor: pointer; }
+.cmp tbody tr:hover td { background: var(--grid); }
+.cmp tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.cmp td.best { color: var(--good); font-weight: 600; }
+.cmp td.miss { color: var(--bad); font-weight: 600; }
+.cmp .algo { font-family: var(--sans); font-weight: 600; }
+
+/* gantt */
+.gantt { display: grid; gap: 4px; }
+.gantt svg { display: block; }
+.gantt text { font: 11px var(--mono); fill: var(--muted); }
+.gantt text.tname { fill: var(--ink); font-family: var(--sans); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.stats td, .stats th { padding: 6px 8px; white-space: nowrap; }
+.stats td { font: 0.85rem var(--mono); }
+.kv { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.88rem; }
+.kv b { font-family: var(--mono); font-weight: 600; }
+.log { margin: 0; padding-left: 18px; font: 0.82rem/1.6 var(--mono); color: var(--muted); }
+.log b { color: var(--ink); font-weight: 500; }
+footer { color: var(--muted); font-size: 0.82rem; }
+footer a { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .chip, .btn { transition: border-color .15s, background .15s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="label">Single-core RTOS scheduler simulator</div>
+      <h1>RTOS Scheduler Lab</h1>
+      <p>Edit a task set, pick an algorithm, and see the tick-by-tick schedule. It runs the same engine as the C++ <code>rtos_sim</code>, ported to JavaScript, so the timelines match the CLI exactly.</p>
+    </div>
+    <a href="https://github.com/kishanballal/rtos-scheduler-simulator">Source on GitHub</a>
+  </header>
+
+  <div class="layout">
+    <section class="panel rail" aria-label="Inputs">
+      <div class="field">
+        <span class="label">Scenario</span>
+        <div class="presets" id="presets"></div>
+      </div>
+      <p class="lesson" id="lesson"></p>
+
+      <div class="field">
+        <span class="label">Tasks</span>
+        <div class="scroll">
+          <table class="tasks">
+            <thead><tr><th></th><th>id</th><th>name</th><th title="arrival tick">arr</th><th title="burst / execution time C">C</th><th title="priority, lower = more urgent">prio</th><th title="period T, 0 = aperiodic">T</th><th title="relative deadline D, 0 = use T">D</th><th title="critical section RESOURCE:START:LENGTH">mutex</th><th></th></tr></thead>
+            <tbody id="taskRows"></tbody>
+          </table>
+        </div>
+        <div class="row">
+          <button class="btn" id="addTask" type="button">Add task</button>
+        </div>
+        <p class="hint">T = 0 makes a one-shot task. D = 0 means the deadline equals the period. Mutex like <code>R1:1:3</code> locks R1 after 1 tick of work and holds it for 3.</p>
+      </div>
+
+      <div class="controls">
+        <label class="field"><span class="label">Algorithm</span>
+          <select id="algo">
+            <option value="all">Compare all</option>
+            <option value="fcfs">FCFS</option>
+            <option value="rr">Round Robin</option>
+            <option value="priority">Priority</option>
+            <option value="rm">Rate Monotonic</option>
+            <option value="edf">EDF</option>
+          </select></label>
+        <label class="field"><span class="label">RR quantum</span><input id="quantum" type="number" min="1" value="2"></label>
+        <label class="field"><span class="label">Horizon</span><input id="horizon" type="number" min="0" value="0" title="0 = automatic (one hyperperiod)"></label>
+        <label class="field"><span class="label">Jitter</span><input id="jitter" type="number" min="0" value="0" title="sporadic releases: period + random 0..N"></label>
+        <label class="field"><span class="label">Seed</span><input id="seed" type="number" min="0" value="1"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="pi"> Priority Inheritance on mutexes (<code>--pi</code>)</label>
+
+      <details>
+        <summary>Import or export as CSV (same format as <code>data/*.csv</code>)</summary>
+        <div class="field" style="margin-top:8px">
+          <textarea id="csv" spellcheck="false" aria-label="Task CSV"></textarea>
+          <div class="row">
+            <button class="btn" id="loadCsv" type="button">Load CSV into table</button>
+            <button class="btn" id="copyCsv" type="button">Copy CSV</button>
+          </div>
+        </div>
+      </details>
+      <p class="err" id="err" hidden></p>
+    </section>
+
+    <div class="out">
+      <section class="panel" aria-label="Schedulability">
+        <h2>Schedulability</h2>
+        <div class="sched" id="sched"></div>
+      </section>
+
+      <section class="panel" aria-label="Comparison" id="cmpPanel">
+        <h2>Which scheduler wins here?</h2>
+        <p class="verdict" id="verdict"></p>
+        <div class="scroll">
+          <table class="cmp">
+            <thead><tr><th>algorithm</th><th>deadline misses</th><th>avg wait</th><th>avg turnaround</th><th>avg response</th><th>switches</th><th>CPU</th><th>done</th></tr></thead>
+            <tbody id="cmpRows"></tbody>
+          </table>
+        </div>
+        <p class="hint">Ranked by deadline misses, then average waiting time, then context switches. Click a row to see its timeline.</p>
+      </section>
+
+      <section class="panel" aria-label="Timeline">
+        <div class="row" style="justify-content:space-between">
+          <h2 id="ganttTitle">Timeline</h2>
+          <div class="tabs" id="tabs"></div>
+        </div>
+        <div class="scroll"><div class="gantt" id="gantt"></div></div>
+        <div class="legend">
+          <span><svg width="14" height="12" aria-hidden="true"><path d="M7 1 L7 11 M3 5 L7 1 L11 5" stroke="currentColor" fill="none" stroke-width="1.5"/></svg> job released</span>
+          <span><svg width="14" height="12" aria-hidden="true"><path d="M2 2 L12 10 M12 2 L2 10" stroke="var(--bad)" stroke-width="2" fill="none"/></svg> deadline missed</span>
+          <span><svg width="14" height="12" aria-hidden="true"><rect x="1" y="2" width="12" height="8" fill="var(--t1)" opacity="0.5"/><rect x="1" y="2" width="12" height="8" fill="none" stroke="var(--ink)" stroke-dasharray="2 2"/></svg> holding a mutex</span>
+        </div>
+        <div class="kv" id="kv"></div>
+        <div class="scroll">
+          <table class="stats">
+            <thead><tr><th>task</th><th>jobs</th><th>done</th><th>avg wait</th><th>avg turnaround</th><th>avg response</th><th>missed</th></tr></thead>
+            <tbody id="statRows"></tbody>
+          </table>
+        </div>
+        <div id="logWrap" hidden>
+          <div class="label" style="margin-bottom:6px">Mutex events</div>
+          <ol class="log" id="log"></ol>
+        </div>
+      </section>
+    </div>
+  </div>
+  <footer>Priority: lower number = more urgent. RM ranks by period, EDF by absolute deadline, ties broken by release time then task id, same as the C++ comparators. Built from <a href="https://github.com/kishanballal/rtos-scheduler-simulator/tree/main/docs/sim.js">docs/sim.js</a>.</footer>
+</div>
+
+<script src="sim.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const PRESETS = [
+  { key: "rmedf", label: "RM vs EDF", csv: "1,FastLoop,0,2,1,5,0\n2,SlowLoop,0,4,2,7,0",
+    lesson: "U = 0.971 is above the Liu & Layland bound (0.828) but below 1. RM gives FastLoop fixed top priority and SlowLoop misses its deadline at t=7. EDF re-ranks by deadline every tick and meets every deadline. This is why EDF is optimal on one core." },
+  { key: "harmonic", label: "Harmonic periods", csv: "1,Sensor,0,1,1,4,0\n2,Filter,0,2,2,8,0\n3,Logger,0,8,3,16,0",
+    lesson: "U = 1.0 fails the Liu & Layland test, yet RM meets every deadline. The test is sufficient, not necessary: when periods divide each other (4, 8, 16) RM can use the whole CPU. Real systems pick harmonic rates for exactly this reason." },
+  { key: "overload", label: "Overload", csv: "1,Fast,0,3,1,5,0\n2,Slow,0,3,2,6,0",
+    lesson: "U = 1.1, so nobody can meet every deadline. Compare who misses: RM sacrifices only the low-priority task and Fast never misses. EDF here lets Fast miss. Under overload, fixed priority degrades predictably, which is one reason RTOSes like FreeRTOS and Zephyr use fixed priorities." },
+  { key: "inversion", label: "Priority inversion", csv: "1,Low,0,5,3,0,0,R1:1:3\n2,High,2,2,1,0,6,R1:0:1\n3,Medium,3,4,2,0,0,",
+    lesson: "The Mars Pathfinder bug. Low holds R1, High blocks on it, then Medium keeps preempting Low, so High finishes at t=10 and misses its deadline of 8. Tick Priority Inheritance: Low borrows High's priority, unlocks sooner, and High finishes at t=6.", algo: "priority" },
+  { key: "interactive", label: "Interactive vs batch", csv: "1,Batch,0,10,3,0,0\n2,Click,1,1,1,0,0\n3,Key,2,1,1,0,0\n4,Scroll,3,1,2,0,0",
+    lesson: "One long job and three short ones. FCFS makes the short jobs wait behind Batch (average response 6.75). Round Robin fixes that without knowing any priorities (1.25). Priority does best (0.00) when you can say which work is urgent." },
+  { key: "control", label: "Control loop", csv: "1,SensorRead,0,1,1,4,4\n2,MotorControl,0,2,2,6,6\n3,Telemetry,0,2,3,12,12\n4,Logger,3,3,4,0,20",
+    lesson: "A typical firmware mix: three periodic tasks (U = 0.75, under the RM bound) plus a one-shot logger. Every real-time scheduler meets all deadlines. FCFS misses one because it cannot preempt a running job." },
+  { key: "textbook", label: "Textbook CPU set", csv: "1,Compile,0,6,3,0,0\n2,Keyboard,1,2,1,0,0\n3,Network,2,4,2,0,0\n4,Backup,4,3,4,0,0",
+    lesson: "The classic OS-course example with no deadlines. Compare waiting and response times: preemptive Priority favours Keyboard, Round Robin spreads the CPU evenly, FCFS is simplest but worst for short jobs." },
+];
+
+let tasks = [];        // raw rows as edited in the table
+let selected = null;   // scheduler key shown in the timeline
+let activePreset = null;
+const colorFor = (i) => `var(--t${(i % 8) + 1})`;
+
+function renderPresets() {
+  $("presets").innerHTML = PRESETS.map((p) =>
+    `<button class="chip" type="button" data-k="${p.key}" aria-pressed="${p.key === activePreset}">${p.label}</button>`).join("");
+}
+function loadPreset(key) {
+  const p = PRESETS.find((x) => x.key === key);
+  activePreset = key;
+  tasks = RtosSim.parseCsv(p.csv);
+  $("pi").checked = false; $("jitter").value = 0; $("horizon").value = 0; $("quantum").value = 2;
+  $("algo").value = "all";
+  selected = p.algo || null;
+  $("lesson").textContent = p.lesson; $("lesson").hidden = false;
+  renderPresets(); renderTable(); update();
+}
+
+const COLS = ["id", "name", "arrival", "burst", "priority", "period", "deadline", "cs"];
+function csText(t) { return t.cs ? `${t.cs.resource}:${t.cs.start}:${t.cs.length}` : ""; }
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function renderTable() {
+  $("taskRows").innerHTML = tasks.map((t, i) => `<tr data-i="${i}">
+    <td><span class="swatch" style="background:${colorFor(i)}"></span></td>
+    ${COLS.map((c) => `<td class="${c === "name" ? "name" : c === "cs" ? "cs" : ""}"><input id="t${i}-${c}" data-c="${c}" aria-label="${c} of task ${i + 1}"
+      ${c === "name" || c === "cs" ? 'type="text"' : 'type="number" min="0"'} value="${esc(c === "cs" ? csText(t) : t[c])}"></td>`).join("")}
+    <td><button class="x" type="button" data-del="${i}" aria-label="Remove task">×</button></td></tr>`).join("");
+}
+
+function readOpts() {
+  const n = (id) => Math.max(0, parseInt($(id).value, 10) || 0);
+  return { quantum: Math.max(1, n("quantum")), horizon: n("horizon"), inheritance: $("pi").checked, jitter: n("jitter"), seed: n("seed") };
+}
+
+function update() {
+  $("csv").value = RtosSim.toCsv(tasks);
+  let prepared;
+  try {
+    prepared = RtosSim.prepare(tasks);
+    if (!prepared.length) throw new Error("Add at least one task.");
+    $("err").hidden = true;
+  } catch (e) { $("err").textContent = e.message; $("err").hidden = false; return; }
+  const opts = readOpts();
+  const algo = $("algo").value;
+  const keys = algo === "all" ? RtosSim.SCHEDULER_KEYS : [algo];
+  const results = {};
+  for (const k of keys) results[k] = RtosSim.run(prepared, { ...opts, algo: k });
+  if (!keys.includes(selected)) selected = null;
+  renderSched(RtosSim.schedulability(prepared));
+  const order = rank(results);
+  if (!selected) selected = order[0];
+  renderComparison(results, order, algo === "all");
+  renderTabs(keys);
+  renderDetail(results[selected], prepared);
+}
+
+function rank(results) {
+  return Object.keys(results).sort((a, b) => {
+    const x = results[a].stats.overall, y = results[b].stats.overall;
+    return x.deadlineMisses - y.deadlineMisses || x.avgWaiting - y.avgWaiting || x.contextSwitches - y.contextSwitches;
+  });
+}
+
+function renderSched(s) {
+  const pct = (v) => Math.min(100, v * 100);
+  const rmPill = s.periodicTasks === 0 ? `<span class="pill maybe">no periodic tasks</span>`
+    : s.rmGuaranteed ? `<span class="pill ok">guaranteed</span>` : s.edfFeasible ? `<span class="pill maybe">not guaranteed</span>` : `<span class="pill no">overloaded</span>`;
+  const edfPill = s.edfFeasible ? `<span class="pill ok">feasible</span>` : `<span class="pill no">overloaded</span>`;
+  $("sched").innerHTML = `
+    <div class="gauge"><span class="label">Utilization U = Σ C/T</span><span class="big">${s.utilization.toFixed(3)}</span>
+      <div class="bar" title="U against 1.0"><i style="width:${pct(s.utilization)}%;${s.utilization > 1 ? "background:var(--bad)" : ""}"></i><b style="left:${pct(s.rmBound)}%" title="RM bound"></b></div>
+      <span class="hint">${s.periodicTasks} periodic task${s.periodicTasks === 1 ? "" : "s"}; the black mark is the RM bound</span></div>
+    <div class="gauge"><span class="label">Rate Monotonic</span><span>U ≤ n(2<sup>1/n</sup> − 1) = <b>${s.rmBound.toFixed(3)}</b></span><span>${rmPill}</span>
+      <span class="hint">${!s.rmGuaranteed && s.edfFeasible ? "Fails the test, but RM may still meet every deadline. The timeline shows what really happens." : "Liu &amp; Layland bound, sufficient but not necessary."}</span></div>
+    <div class="gauge"><span class="label">EDF</span><span>U ≤ 1</span><span>${edfPill}</span>
+      <span class="hint">${s.implicitDeadlines ? "Exact test for implicit deadlines (D = T)." : "Some D < T, so this test is necessary only."}</span></div>`;
+}
+
+const fmt = (v) => v.toFixed(2);
+function renderComparison(results, order, compare) {
+  $("cmpPanel").hidden = !compare;
+  if (!compare) return;
+  const vals = (f) => order.map((k) => f(results[k].stats.overall));
+  const minOf = (f) => Math.min(...vals(f));
+  const best = { m: minOf((o) => o.deadlineMisses), w: minOf((o) => o.avgWaiting), t: minOf((o) => o.avgTurnaround), r: minOf((o) => o.avgResponse), s: minOf((o) => o.contextSwitches) };
+  $("cmpRows").innerHTML = order.map((k) => {
+    const r = results[k], o = r.stats.overall;
+    const c = (v, b) => (Math.abs(v - b) < 1e-9 ? ' class="best"' : "");
+    return `<tr data-k="${k}" class="${k === selected ? "sel" : ""}" tabindex="0">
+      <td class="algo">${esc(r.schedulerName)}</td>
+      <td${o.deadlineMisses > 0 ? ' class="miss"' : c(o.deadlineMisses, best.m)}>${o.deadlineMisses}</td>
+      <td${c(o.avgWaiting, best.w)}>${fmt(o.avgWaiting)}</td><td${c(o.avgTurnaround, best.t)}>${fmt(o.avgTurnaround)}</td>
+      <td${c(o.avgResponse, best.r)}>${fmt(o.avgResponse)}</td><td${c(o.contextSwitches, best.s)}>${o.contextSwitches}</td>
+      <td>${(o.cpuUtilization * 100).toFixed(1)}%</td><td>${o.completed}</td></tr>`;
+  }).join("");
+  const win = results[order[0]], wo = win.stats.overall;
+  const ties = order.filter((k) => { const o = results[k].stats.overall; return o.deadlineMisses === wo.deadlineMisses && Math.abs(o.avgWaiting - wo.avgWaiting) < 1e-9 && o.contextSwitches === wo.contextSwitches; });
+  const names = ties.map((k) => `<strong>${esc(results[k].schedulerName)}</strong>`).join(" and ");
+  const missText = wo.deadlineMisses === 0 ? "meets every deadline" : `misses the fewest deadlines (${wo.deadlineMisses})`;
+  const missers = order.filter((k) => results[k].stats.overall.deadlineMisses > 0).map((k) => esc(results[k].schedulerName));
+  $("verdict").innerHTML = `Best here: ${names}. ${ties.length > 1 ? "They tie: each" : "It"} ${missText} with an average wait of ${fmt(wo.avgWaiting)} ticks.` +
+    (missers.length && wo.deadlineMisses === 0 ? ` Missed deadlines: ${missers.join(", ")}.` : "");
+}
+
+function renderTabs(keys) {
+  $("tabs").innerHTML = keys.length < 2 ? "" : keys.map((k) => `<button class="chip" type="button" data-tab="${k}" aria-pressed="${k === selected}">${{ fcfs: "FCFS", rr: "RR", priority: "Priority", rm: "RM", edf: "EDF" }[k]}</button>`).join("");
+}
+
+function renderDetail(r, prepared) {
+  $("ganttTitle").textContent = `Timeline · ${r.schedulerName}`;
+  const idx = new Map(tasks.map((t, i) => [t.id | 0, i]));
+  const L = r.length, cw = Math.max(12, Math.min(30, Math.floor(820 / Math.max(L, 1))));
+  const left = 104, rowH = 26, top = 18, rows = prepared.length + 1;
+  const W = left + L * cw + 12, H = top + rows * rowH + 6;
+  const rowOf = new Map(prepared.map((t, i) => [t.id, i]));
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gantt chart for ${esc(r.schedulerName)}">`;
+  const step = L > 60 ? 10 : L > 30 ? 5 : 1;
+  for (let x = 0; x <= L; x++) {
+    const px = left + x * cw;
+    s += `<line x1="${px}" y1="${top}" x2="${px}" y2="${H - 6}" stroke="var(--${x % step === 0 ? "line" : "grid"})" stroke-width="1"/>`;
+    if (x % step === 0 && x < L) s += `<text x="${px + 2}" y="12">${x}</text>`;
+  }
+  prepared.forEach((t, i) => s += `<text class="tname" x="0" y="${top + i * rowH + 17}">${esc(t.name.length > 13 ? t.name.slice(0, 12) + "…" : t.name)}</text>`);
+  s += `<text class="tname" x="0" y="${top + prepared.length * rowH + 17}" style="fill:var(--muted)">idle</text>`;
+  // which ticks were inside a critical section
+  const holding = new Set();
+  const done = new Map();
+  r.timeline.forEach((id, x) => {
+    if (id < 0) return;
+    const t = prepared[rowOf.get(id)];
+    if (!t.cs) return;
+    const p = done.get(id) || 0;
+    const within = p % t.burst;
+    if (within >= t.cs.start && within < t.cs.start + t.cs.length) holding.add(x);
+    done.set(id, p + 1);
+  });
+  // cells
+  r.timeline.forEach((id, x) => {
+    const row = id < 0 ? prepared.length : rowOf.get(id);
+    const color = id < 0 ? "var(--idle)" : colorFor(idx.get(id) ?? row);
+    const y = top + row * rowH + 4;
+    s += `<rect x="${left + x * cw + 1}" y="${y}" width="${cw - 1}" height="${rowH - 8}" rx="2" fill="${color}"${holding.has(x) ? ' opacity="0.55"' : ""}><title>t=${x}: ${id < 0 ? "idle" : esc(prepared[row].name)}</title></rect>`;
+    if (holding.has(x)) s += `<rect x="${left + x * cw + 1.5}" y="${y + 0.5}" width="${cw - 2}" height="${rowH - 9}" rx="2" fill="none" stroke="var(--ink)" stroke-dasharray="2 2"/>`;
+  });
+  // releases and misses
+  for (const j of r.jobs) {
+    const row = rowOf.get(j.task.id), yb = top + row * rowH + rowH - 2, px = left + j.release * cw;
+    if (j.release < L) s += `<path d="M${px} ${yb} L${px} ${yb - 9} M${px - 3} ${yb - 6} L${px} ${yb - 9} L${px + 3} ${yb - 6}" stroke="var(--ink)" stroke-width="1.3" fill="none"/>`;
+    if (j.missed && j.absDeadline <= L) {
+      const dx = left + j.absDeadline * cw, yc = top + row * rowH + rowH / 2;
+      s += `<path d="M${dx - 5} ${yc - 5} L${dx + 5} ${yc + 5} M${dx + 5} ${yc - 5} L${dx - 5} ${yc + 5}" stroke="var(--bad)" stroke-width="2.4" fill="none"><title>${esc(j.task.name)} missed its deadline at t=${j.absDeadline}</title></path>`;
+    }
+  }
+  s += "</svg>";
+  $("gantt").innerHTML = s;
+
+  const o = r.stats.overall;
+  $("kv").innerHTML = `<span>CPU <b>${(o.cpuUtilization * 100).toFixed(1)}%</b></span><span>context switches <b>${o.contextSwitches}</b></span>
+    <span>throughput <b>${o.throughput.toFixed(3)}</b> jobs/tick</span><span>deadline misses <b style="color:var(--${o.deadlineMisses ? "bad" : "good"})">${o.deadlineMisses}</b></span>
+    <span>ticks simulated <b>${r.length}</b></span>${r.blockings ? `<span>mutex blockings <b>${r.blockings}</b></span>` : ""}`;
+  $("statRows").innerHTML = r.stats.perTask.map((t) => `<tr><td style="font-family:var(--sans)"><span class="swatch" style="background:${colorFor(idx.get(t.taskId) ?? 0)}"></span> ${esc(t.name)}</td>
+    <td>${t.released}</td><td>${t.completed}</td><td>${fmt(t.avgWaiting)}</td><td>${fmt(t.avgTurnaround)}</td><td>${fmt(t.avgResponse)}</td>
+    <td style="color:var(--${t.deadlineMisses ? "bad" : "muted"})">${t.deadlineMisses}</td></tr>`).join("");
+  $("logWrap").hidden = !r.events.length;
+  $("log").innerHTML = r.events.map((e) => `<li><b>t=${e.t}</b> ${esc(e.text)}</li>`).join("");
+}
+
+// ---- events ----
+$("presets").addEventListener("click", (e) => { const b = e.target.closest("[data-k]"); if (b) loadPreset(b.dataset.k); });
+function edited() { if (activePreset) { activePreset = null; renderPresets(); $("lesson").hidden = true; } update(); }
+$("taskRows").addEventListener("input", (e) => {
+  const inp = e.target, i = +inp.closest("tr").dataset.i, c = inp.dataset.c;
+  if (c === "cs") {
+    const v = inp.value.trim(), p = v.split(":");
+    tasks[i].cs = v && p.length === 3 ? { resource: p[0].trim(), start: parseInt(p[1], 10) || 0, length: parseInt(p[2], 10) || 0 } : null;
+  } else tasks[i][c] = c === "name" ? inp.value : (inp.value === "" ? 0 : Number(inp.value));
+  edited();
+});
+$("taskRows").addEventListener("click", (e) => { const b = e.target.closest("[data-del]"); if (b) { tasks.splice(+b.dataset.del, 1); renderTable(); edited(); } });
+$("addTask").addEventListener("click", () => {
+  const id = tasks.reduce((m, t) => Math.max(m, t.id | 0), 0) + 1;
+  tasks.push({ id, name: `Task${id}`, arrival: 0, burst: 1, priority: id, period: 0, deadline: 0, cs: null });
+  renderTable(); edited();
+});
+for (const id of ["algo", "quantum", "horizon", "jitter", "seed", "pi"]) $(id).addEventListener("input", () => { if (id === "algo") selected = null; update(); });
+$("cmpRows").addEventListener("click", (e) => { const tr = e.target.closest("[data-k]"); if (tr) { selected = tr.dataset.k; update(); } });
+$("cmpRows").addEventListener("keydown", (e) => { const tr = e.target.closest("[data-k]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selected = tr.dataset.k; update(); } });
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) { selected = b.dataset.tab; update(); } });
+$("loadCsv").addEventListener("click", () => {
+  try { tasks = RtosSim.parseCsv($("csv").value); renderTable(); edited(); }
+  catch (e) { $("err").textContent = e.message; $("err").hidden = false; }
+});
+$("copyCsv").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("csv").value); $("copyCsv").textContent = "Copied"; }
+  catch { $("csv").select(); $("copyCsv").textContent = "Selected, press Ctrl+C"; }
+  setTimeout(() => ($("copyCsv").textContent = "Copy CSV"), 1600);
+});
+loadPreset("rmedf");
+</script>
+</body>
+</html>

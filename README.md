@@ -10,6 +10,17 @@ Key data structures are written by hand: a templated binary **min-heap**
 (ready queue for Priority/RM/EDF and the simulation event queue) and a
 **circular queue** (Round Robin). Full design notes: [docs/DESIGN.md](docs/DESIGN.md).
 
+## Web UI
+
+Open **https://kishanballal.github.io/rtos-scheduler-simulator/** to run the simulator in a browser:
+edit a task set, pick an algorithm (or compare all five), toggle Priority Inheritance, and see the
+Gantt chart, per-task stats, schedulability checks and a ranked comparison. Seven built-in scenarios
+show where each scheduler wins (RM vs EDF, harmonic periods, overload, priority inversion, and more).
+
+The page is static (`docs/index.html`) and uses `docs/sim.js`, a line-by-line JavaScript port of the
+engine. It produces the same timelines as `rtos_sim`, including `--pi` and `--jitter`/`--seed`.
+To run it locally, open `docs/index.html` in a browser.
+
 ## Build
 
 Requires CMake ≥ 3.16 and a C++17 compiler (GCC ≥ 9, Clang ≥ 10 or MSVC 2019+).
